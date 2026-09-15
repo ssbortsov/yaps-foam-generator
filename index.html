@@ -53,6 +53,9 @@ button.go:hover{background:var(--ink);border-color:var(--ink)}
 :focus-visible{outline:2px solid var(--mark);outline-offset:2px}
 .note{margin-top:14px;font-size:12px;line-height:1.45;color:var(--muted)}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.ratios{display:flex;gap:6px;flex-wrap:wrap}
+.ratios button{font-size:12px;padding:5px 11px;border-color:var(--line);color:var(--muted)}
+.ratios button.active,.ratios button:hover{border-color:var(--ink);background:var(--ink);color:var(--panel)}
 </style>
 </head>
 <body>
@@ -66,18 +69,29 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
 <div class="grid">
 
   <div class="stage">
-    <svg id="foam" viewBox="0 0 680 400" role="img" aria-labelledby="ft fd">
+    <svg id="foam" viewBox="0 0 640 360" role="img" aria-labelledby="ft fd">
       <title id="ft">Паттерн пены</title>
       <desc id="fd">Ячейки разного размера со скруглёнными углами и выпуклыми гранями; перемычки сужаются на гранях и расширяются в узлах.</desc>
-      <defs><clipPath id="fclip"><rect x="0" y="0" width="680" height="400"/></clipPath></defs>
+      <defs><clipPath id="fclip"><rect id="fclipr" x="0" y="0" width="640" height="360"/></clipPath></defs>
       <g clip-path="url(#fclip)">
-        <rect id="bg" x="0" y="0" width="680" height="400" fill="#ffffff"/>
+        <rect id="bg" x="0" y="0" width="640" height="360" fill="#ffffff"/>
         <path id="mesh" fill="#191c18" fill-rule="evenodd"/>
       </g>
     </svg>
   </div>
 
   <div class="panel">
+
+    <div class="set">
+      <h2>Пропорции</h2>
+      <div class="ratios">
+        <button class="rbtn" data-w="600" data-h="600">1:1</button>
+        <button class="rbtn" data-w="480" data-h="640">3:4</button>
+        <button class="rbtn" data-w="360" data-h="640">9:16</button>
+        <button class="rbtn active" data-w="640" data-h="360">16:9</button>
+        <button class="rbtn" data-w="640" data-h="480">4:3</button>
+      </div>
+    </div>
 
     <div class="set">
       <h2>Структура</h2>
@@ -123,11 +137,12 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
 <script>
 (function(){
 "use strict";
-var W=680,H=400,M=110,polys=[];
+var W=640,H=360,M=110,polys=[];
 function el(id){return document.getElementById(id)}
 var cnt=el('cnt'),big=el('big'),rat=el('rat'),spr=el('spr'),rnd=el('rnd'),cvx=el('cvx'),thk=el('thk'),tpr=el('tpr');
 var cntO=el('cntO'),bigO=el('bigO'),ratO=el('ratO'),sprO=el('sprO'),rndO=el('rndO'),cvxO=el('cvxO'),thkO=el('thkO'),tprO=el('tprO');
 var mesh=el('mesh'),bg=el('bg'),fg=el('fg'),bgc=el('bgc'),tr=el('tr'),sd=el('sd'),info=el('info');
+var foam=el('foam'),fclipr=el('fclipr');
 
 function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function area(p){var s=0;for(var i=0;i<p.length;i++){var q=p[(i+1)%p.length];s+=p[i].x*q.y-q.x*p[i].y}return s/2}
@@ -294,6 +309,17 @@ el('cp').addEventListener('click',function(){
 });
 
 el('re').addEventListener('click',function(){sd.value=Math.floor(Math.random()*100000);compute()});
+document.querySelectorAll('.rbtn').forEach(function(b){
+  b.addEventListener('click',function(){
+    document.querySelectorAll('.rbtn').forEach(function(x){x.classList.remove('active')});
+    this.classList.add('active');
+    W=+this.dataset.w; H=+this.dataset.h;
+    foam.setAttribute('viewBox','0 0 '+W+' '+H);
+    fclipr.setAttribute('width',W); fclipr.setAttribute('height',H);
+    bg.setAttribute('width',W); bg.setAttribute('height',H);
+    compute();
+  });
+});
 [cnt,big,rat,spr].forEach(function(c){c.addEventListener('input',compute)});
 sd.addEventListener('change',compute);
 [rnd,cvx,thk,tpr].forEach(function(c){c.addEventListener('input',render)});
