@@ -148,6 +148,20 @@ var foam=el('foam'),fclipr=el('fclipr');
 function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function area(p){var s=0;for(var i=0;i<p.length;i++){var q=p[(i+1)%p.length];s+=p[i].x*q.y-q.x*p[i].y}return s/2}
 function centroid(p){var s=0,cx=0,cy=0;for(var i=0;i<p.length;i++){var q=p[(i+1)%p.length];var c=p[i].x*q.y-q.x*p[i].y;s+=c;cx+=(p[i].x+q.x)*c;cy+=(p[i].y+q.y)*c}s*=3;return s===0?{x:p[0].x,y:p[0].y}:{x:cx/s,y:cy/s}}
+function collapse(p,thresh){
+  for(var pass=0;pass<p.length;pass++){
+    var merged=false;
+    for(var i=0;i<p.length;i++){
+      var j=(i+1)%p.length;
+      if(Math.hypot(p[j].x-p[i].x,p[j].y-p[i].y)<thresh){
+        p[i]={x:(p[i].x+p[j].x)/2,y:(p[i].y+p[j].y)/2};
+        p.splice(j,1);merged=true;break;
+      }
+    }
+    if(!merged)break;
+  }
+  return p.length>=3?p:null;
+}
 function halfplane(poly,pi,pj,wi,wj){
   var out=[],n=poly.length;if(!n)return out;
   function f(p){var dx=p.x-pj.x,dy=p.y-pj.y,ex=p.x-pi.x,ey=p.y-pi.y;return(dx*dx+dy*dy-wj)-(ex*ex+ey*ey-wi)}
@@ -193,11 +207,22 @@ function compute(){
   var w=[];
   for(i=0;i<N;i++){var u=s[i].c===1?1.55:(s[i].c===2?0:s[i].u);var rad=u*spread*d*0.95;w.push(rad*rad)}
   lloyd(2,w);
+  var base0=+thk.value/10,cullMin=(2*base0)*(2*base0);
+  for(var cp=0;cp<3;cp++){
+    var cl0=cells(w),keep=[],keepW=[],culled=false;
+    for(i=0;i<N;i++){
+      if(cl0[i].length<3||Math.abs(area(cl0[i]))<cullMin){culled=true;}
+      else{keep.push(s[i]);keepW.push(w[i]);}
+    }
+    if(!culled)break;
+    s=keep;w=keepW;N=s.length;
+    if(N<3)break;
+  }
   var cl=cells(w);
   polys=[];
   for(i=0;i<N;i++){
     var p=cl[i];if(p.length<3)continue;
-    var a=area(p);if(Math.abs(a)<12)continue;
+    var a=area(p);if(Math.abs(a)<4)continue;
     var c2=centroid(p);
     if(c2.x<-M-60||c2.x>W+M+60||c2.y<-M-60||c2.y>H+M+60)continue;
     polys.push({pts:p,cen:c2,sgn:a>0?1:-1});
@@ -259,12 +284,15 @@ function cellPath(p,cen,convex,frac){
 function buildPath(){
   var base=+thk.value/10,k=+tpr.value/100,convex=+cvx.value/100,frac=+rnd.value/100;
   thkO.textContent=base.toFixed(1);tprO.textContent=k.toFixed(2);cvxO.textContent=convex.toFixed(2);rndO.textContent=frac.toFixed(2);
+  var thresh=0.6*base,minArea=(2*base)*(2*base);
   var d='M0 0H'+W+'V'+H+'H0Z';
   for(var i=0;i<polys.length;i++){
-    var q=inset(polys[i].pts,polys[i].cen,base,k,convex);
+    var pts=collapse(polys[i].pts.slice(),thresh);
+    if(!pts)continue;
+    var q=inset(pts,polys[i].cen,base,k,convex);
     if(!q)continue;
     var a=area(q);
-    if(a*polys[i].sgn<=0||Math.abs(a)<20)continue;
+    if(a*polys[i].sgn<=0||Math.abs(a)<minArea)continue;
     var sp=cellPath(q,polys[i].cen,convex,frac);
     if(sp)d+=sp;
   }
@@ -322,9 +350,9 @@ document.querySelectorAll('.rbtn').forEach(function(b){
     compute();
   });
 });
-[cnt,big,rat,spr].forEach(function(c){c.addEventListener('input',compute)});
+[cnt,big,rat,spr,thk].forEach(function(c){c.addEventListener('input',compute)});
 sd.addEventListener('change',compute);
-[rnd,cvx,thk,tpr].forEach(function(c){c.addEventListener('input',render)});
+[rnd,cvx,tpr].forEach(function(c){c.addEventListener('input',render)});
 [fg,bgc].forEach(function(c){c.addEventListener('input',render)});
 tr.addEventListener('change',render);
 
