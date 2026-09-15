@@ -1,8 +1,8 @@
-# Генератор пены
+# YAPS — генератор пены
 
 Векторный паттерн пены: ячейки строятся по взвешенной диаграмме Вороного (диаграмме Лагерра), вжимаются внутрь на половину зазора, скругляются по углам и выгибаются по граням. Сетка — это то, что осталось между ячейками. Экспорт в SVG.
 
-Открыть: [ssbortsov.github.io/foam-pattern](https://ssbortsov.github.io/foam-pattern/)
+Открыть: [ssbortsov.github.io/yaps-foam-generator](https://ssbortsov.github.io/yaps-foam-generator/)
 
 ## Зачем
 
