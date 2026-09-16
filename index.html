@@ -258,29 +258,67 @@ function inset(p,cen,base,k,convex){
 }
 
 function cellPath(p,cen,convex,frac){
-  var n=p.length,U=[],Ls=[],i;
+  var n=p.length,i,ip1;
+  if(n<3)return '';
+  var U=[],Ls=[];
   for(i=0;i<n;i++){
     var A=p[i],B=p[(i+1)%n],ex=B.x-A.x,ey=B.y-A.y,L=Math.hypot(ex,ey);
     if(L<1e-6)return '';
     Ls.push(L);U.push({x:ex/L,y:ey/L});
   }
+  // Radius from cell area so all corners of one cell agree
+  var rBase=frac*0.5*Math.sqrt(Math.abs(area(p))/Math.PI);
   var rad=[];
-  for(i=0;i<n;i++)rad.push(frac*0.5*Math.min(Ls[(i-1+n)%n],Ls[i]));
+  for(i=0;i<n;i++)rad.push(Math.min(rBase,0.42*Ls[(i-1+n)%n],0.42*Ls[i]));
+  // st[i]=start of face i (after corner at vertex i), en[i]=end of face i
   var st=[],en=[];
   for(i=0;i<n;i++){
-    var A=p[i],B=p[(i+1)%n],u=U[i];
-    st.push({x:A.x+u.x*rad[i],y:A.y+u.y*rad[i]});
-    en.push({x:B.x-u.x*rad[(i+1)%n],y:B.y-u.y*rad[(i+1)%n]});
+    var vi=p[i],u=U[i];
+    st.push({x:vi.x+u.x*rad[i],y:vi.y+u.y*rad[i]});
+    var vn=p[(i+1)%n];
+    en.push({x:vn.x-u.x*rad[(i+1)%n],y:vn.y-u.y*rad[(i+1)%n]});
+  }
+  // Chord lengths used for handle sizing
+  var faceLen=[],ccrd=[];
+  for(i=0;i<n;i++){
+    faceLen.push(Math.max(0,Ls[i]-rad[i]-rad[(i+1)%n]));
+    var pe=en[(i-1+n)%n];
+    ccrd.push(Math.hypot(st[i].x-pe.x,st[i].y-pe.y));
+  }
+  // Equal handle length at every junction: h=0.36*min(face chord, corner chord)
+  var hSt=[],hEn=[];
+  for(i=0;i<n;i++){
+    hSt.push(0.36*Math.min(ccrd[i],faceLen[i]));
+    hEn.push(0.36*Math.min(faceLen[i],ccrd[(i+1)%n]));
   }
   var s='M'+st[0].x.toFixed(2)+' '+st[0].y.toFixed(2);
   for(i=0;i<n;i++){
-    var a=st[i],b=en[i],mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
+    ip1=(i+1)%n;
+    var a=st[i],b=en[i],v=p[ip1],w=st[ip1];
+    // Outward normal and sag for face i
+    var emx=(a.x+b.x)/2,emy=(a.y+b.y)/2;
     var nx=-U[i].y,ny=U[i].x;
-    if((cen.x-mx)*nx+(cen.y-my)*ny>0){nx=-nx;ny=-ny}
+    if((cen.x-emx)*nx+(cen.y-emy)*ny>0){nx=-nx;ny=-ny}
     var sag=convex*0.13*Ls[i];
-    s+='Q'+(mx+nx*2*sag).toFixed(2)+' '+(my+ny*2*sag).toFixed(2)+' '+b.x.toFixed(2)+' '+b.y.toFixed(2);
-    var v=p[(i+1)%n],w2=st[(i+1)%n];
-    s+='Q'+v.x.toFixed(2)+' '+v.y.toFixed(2)+' '+w2.x.toFixed(2)+' '+w2.y.toFixed(2);
+    // Equivalent-Q ctrl point; use as tangent direction source
+    var qx=emx+nx*2*sag,qy=emy+ny*2*sag;
+    var d1x=qx-a.x,d1y=qy-a.y,d1L=Math.hypot(d1x,d1y);
+    var d2x=qx-b.x,d2y=qy-b.y,d2L=Math.hypot(d2x,d2y);
+    var cp1x,cp1y,cp2x,cp2y;
+    if(d1L<1e-9){cp1x=a.x+U[i].x*hSt[i];cp1y=a.y+U[i].y*hSt[i];}
+    else{cp1x=a.x+d1x/d1L*hSt[i];cp1y=a.y+d1y/d1L*hSt[i];}
+    if(d2L<1e-9){cp2x=b.x-U[i].x*hEn[i];cp2y=b.y-U[i].y*hEn[i];}
+    else{cp2x=b.x+d2x/d2L*hEn[i];cp2y=b.y+d2y/d2L*hEn[i];}
+    s+='C'+cp1x.toFixed(2)+' '+cp1y.toFixed(2)+' '+cp2x.toFixed(2)+' '+cp2y.toFixed(2)+' '+b.x.toFixed(2)+' '+b.y.toFixed(2);
+    // Corner cubic: b→w bending around vertex v
+    var tbx=v.x-b.x,tby=v.y-b.y,tbL=Math.hypot(tbx,tby);
+    var twx=v.x-w.x,twy=v.y-w.y,twL=Math.hypot(twx,twy);
+    var cc1x,cc1y,cc2x,cc2y;
+    if(tbL<1e-9){cc1x=b.x;cc1y=b.y;}
+    else{cc1x=b.x+tbx/tbL*hEn[i];cc1y=b.y+tby/tbL*hEn[i];}
+    if(twL<1e-9){cc2x=w.x;cc2y=w.y;}
+    else{cc2x=w.x+twx/twL*hSt[ip1];cc2y=w.y+twy/twL*hSt[ip1];}
+    s+='C'+cc1x.toFixed(2)+' '+cc1y.toFixed(2)+' '+cc2x.toFixed(2)+' '+cc2y.toFixed(2)+' '+w.x.toFixed(2)+' '+w.y.toFixed(2);
   }
   return s+'Z';
 }
