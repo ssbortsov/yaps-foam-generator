@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>YAPS — пузыри</title>
-<meta name="description" content="Генератор паттерна из пузырей по взвешенной диаграмме Вороного, экспорт в SVG.">
+<meta name="description" content="Генератор паттерна из круглых пузырей по взвешенной диаграмме Вороного, экспорт в SVG.">
 <style>
 :root{
   --paper:#e7eae4;
@@ -66,7 +66,7 @@ button.go:hover{background:var(--ink);border-color:var(--ink)}
 
 <header>
   <h1>YAPS — пузыри</h1>
-  <p>Форма каждого пузыря — плавный переход между вписанной окружностью и ячейкой Вороного. Ползунок «Жидкость» задаёт, насколько пузырь адаптируется к соседям.</p>
+  <p>Пузыри строятся как вписанные окружности в ячейки Вороного. Ползунок «Жидкость» мягко дотягивает каждый пузырь к соседям — форма остаётся круглой, но чуть адаптируется к окружению.</p>
   <span class="nav"><a href="index.html">← Пена</a></span>
 </header>
 
@@ -75,7 +75,7 @@ button.go:hover{background:var(--ink);border-color:var(--ink)}
   <div class="stage">
     <svg id="foam" viewBox="0 0 640 360" role="img" aria-labelledby="ft fd">
       <title id="ft">Паттерн пузырей</title>
-      <desc id="fd">Пузыри разного размера, форма — между окружностью и ячейкой Вороного.</desc>
+      <desc id="fd">Круглые пузыри разного размера, слегка адаптированные к форме ячеек Вороного.</desc>
       <defs><clipPath id="fclip"><rect id="fclipr" x="0" y="0" width="640" height="360"/></clipPath></defs>
       <g clip-path="url(#fclip)">
         <rect id="bg" x="0" y="0" width="640" height="360" fill="#ffffff"/>
@@ -107,7 +107,7 @@ button.go:hover{background:var(--ink);border-color:var(--ink)}
 
     <div class="set">
       <h2>Форма</h2>
-      <div class="ctl"><label for="liq">Жидкость</label><output id="liqO">0.40</output><input type="range" id="liq" min="0" max="100" step="1" value="40"></div>
+      <div class="ctl"><label for="liq">Жидкость</label><output id="liqO">0.25</output><input type="range" id="liq" min="0" max="100" step="1" value="25"></div>
       <div class="ctl"><label for="thk">Зазор</label><output id="thkO">5.5</output><input type="range" id="thk" min="5" max="200" step="1" value="55"></div>
       <div class="ctl"><label for="tpr">Перепад зазора сверху вниз</label><output id="tprO">0.10</output><input type="range" id="tpr" min="0" max="95" step="1" value="10"></div>
     </div>
@@ -150,20 +150,6 @@ var foam=el('foam'),fclipr=el('fclipr');
 function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function area(p){var s=0;for(var i=0;i<p.length;i++){var q=p[(i+1)%p.length];s+=p[i].x*q.y-q.x*p[i].y}return s/2}
 function centroid(p){var s=0,cx=0,cy=0;for(var i=0;i<p.length;i++){var q=p[(i+1)%p.length];var c=p[i].x*q.y-q.x*p[i].y;s+=c;cx+=(p[i].x+q.x)*c;cy+=(p[i].y+q.y)*c}s*=3;return s===0?{x:p[0].x,y:p[0].y}:{x:cx/s,y:cy/s}}
-function collapse(p,thresh){
-  for(var pass=0;pass<p.length;pass++){
-    var merged=false;
-    for(var i=0;i<p.length;i++){
-      var j=(i+1)%p.length;
-      if(Math.hypot(p[j].x-p[i].x,p[j].y-p[i].y)<thresh){
-        p[i]={x:(p[i].x+p[j].x)/2,y:(p[i].y+p[j].y)/2};
-        p.splice(j,1);merged=true;break;
-      }
-    }
-    if(!merged)break;
-  }
-  return p.length>=3?p:null;
-}
 function halfplane(poly,pi,pj,wi,wj){
   var out=[],n=poly.length;if(!n)return out;
   function f(p){var dx=p.x-pj.x,dy=p.y-pj.y,ex=p.x-pi.x,ey=p.y-pi.y;return(dx*dx+dy*dy-wj)-(ex*ex+ey*ey-wi)}
@@ -227,110 +213,72 @@ function compute(){
     var a=area(p);if(Math.abs(a)<4)continue;
     var c2=centroid(p);
     if(c2.x<-M-60||c2.x>W+M+60||c2.y<-M-60||c2.y>H+M+60)continue;
-    polys.push({pts:p,cen:c2,sgn:a>0?1:-1});
+    polys.push({pts:p,cen:c2});
   }
   info.textContent='Крупных '+NB+', мелких '+NS+', всего ячеек '+polys.length+' — включая те, что за кадром.';
   render();
 }
 
-/* Для каждой ячейки строим форму, которая плавно переходит между
-   вписанной окружностью (liquid=0) и ячейкой Вороного (liquid=1).
-   Каждая вершина Вороного перетягивает ближайшую точку окружности
-   к себе пропорционально liquid. Рёбра выгибаются наружу — это
-   создаёт натяжение плёнки между пузырями. */
-function bubblePath(pts, cen, base, k, liquid) {
-  var RND = 0.88; // бaked-in corner rounding
-  var CVX = liquid * 0.55; // convexity растёт с жидкостью
+/* Расстояние от точки (cx,cy) до границы многоугольника в направлении (dx,dy). */
+function rayDist(pts,cx,cy,dx,dy){
+  var n=pts.length,best=Infinity;
+  for(var i=0;i<n;i++){
+    var A=pts[i],B=pts[(i+1)%n];
+    var ex=B.x-A.x,ey=B.y-A.y,fx=A.x-cx,fy=A.y-cy;
+    var den=dx*ey-dy*ex;
+    if(Math.abs(den)<1e-10)continue;
+    var t=(-fx*ey+fy*ex)/den;
+    var u=(-fx*dy+fy*dx)/den;
+    if(t>1e-6&&u>=0&&u<=1&&t<best)best=t;
+  }
+  return best;
+}
 
-  var n = pts.length, i;
-  // inscribed circle radius
-  var cx = cen.x, cy = cen.y, minD = Infinity;
-  for (i = 0; i < n; i++) {
-    var A = pts[i], B = pts[(i+1)%n];
-    var ex = B.x-A.x, ey = B.y-A.y, L = Math.hypot(ex,ey);
-    if (L < 1e-6) continue;
-    var dist = Math.abs(ey*(cx-A.x)-ex*(cy-A.y))/L;
-    if (dist < minD) minD = dist;
+/* Строим форму пузыря: 24 точки по кругу, каждая слегка дотянута
+   к границе ячейки Вороного на величину liquid*(доступный зазор).
+   Соединяем точки сглаженной кривой через средние точки — форма
+   остаётся круглой при любом значении liquid. */
+function bubblePath(pts,cen,r,g,liquid){
+  if(r<1)return '';
+  var cx=cen.x,cy=cen.y,N=24,verts=[];
+  for(var i=0;i<N;i++){
+    var angle=i/N*Math.PI*2;
+    var dx=Math.cos(angle),dy=Math.sin(angle);
+    var pd=rayDist(pts,cx,cy,dx,dy);
+    var slack=Math.max(0, pd-g*0.5-r);
+    var ri=r+slack*liquid;
+    verts.push({x:cx+ri*dx, y:cy+ri*dy});
   }
-
-  // gap at centroid y
-  var gy = Math.min(1, Math.max(0, cy/H));
-  var g = Math.max(0.4, base*((1-k)+2*k*gy));
-  var r = minD - g/2;
-  if (r < base*0.25) return '';
-
-  // inset polygon (same formula as foam inset, but g already accounts for convexity offset)
-  var lines = [];
-  for (i = 0; i < n; i++) {
-    var A = pts[i], B = pts[(i+1)%n];
-    var ex = B.x-A.x, ey = B.y-A.y, L2 = Math.hypot(ex,ey);
-    if (L2 < 1e-6) return '';
-    var ux = ex/L2, uy = ey/L2, nx = -uy, ny = ux;
-    var mx = (A.x+B.x)/2, my = (A.y+B.y)/2;
-    if ((cx-mx)*nx+(cy-my)*ny < 0) { nx=-nx; ny=-ny; }
-    var off = g/2 + CVX*0.13*L2;
-    lines.push({px:A.x+nx*off, py:A.y+ny*off, ux:ux, uy:uy});
+  var s2='';
+  for(i=0;i<N;i++){
+    var prev=verts[(i-1+N)%N],curr=verts[i],next=verts[(i+1)%N];
+    var mx=(prev.x+curr.x)/2,my2=(prev.y+curr.y)/2;
+    var nx2=(curr.x+next.x)/2,ny2=(curr.y+next.y)/2;
+    if(i===0)s2='M'+mx.toFixed(2)+' '+my2.toFixed(2);
+    s2+='Q'+curr.x.toFixed(2)+' '+curr.y.toFixed(2)+' '+nx2.toFixed(2)+' '+ny2.toFixed(2);
   }
-  var inPts = [];
-  for (i = 0; i < n; i++) {
-    var L1 = lines[(i-1+n)%n], L2 = lines[i];
-    var den = L1.ux*L2.uy - L1.uy*L2.ux;
-    if (Math.abs(den) < 1e-9) return '';
-    var t = ((L2.px-L1.px)*L2.uy-(L2.py-L1.py)*L2.ux)/den;
-    inPts.push({x:L1.px+L1.ux*t, y:L1.py+L1.uy*t});
-  }
-
-  // blend: circle point at each vertex angle → inset vertex
-  var verts = [];
-  for (i = 0; i < n; i++) {
-    var angle = Math.atan2(inPts[i].y-cy, inPts[i].x-cx);
-    var circX = cx + r*Math.cos(angle);
-    var circY = cy + r*Math.sin(angle);
-    verts.push({
-      x: circX + (inPts[i].x-circX)*liquid,
-      y: circY + (inPts[i].y-circY)*liquid
-    });
-  }
-
-  // render with corner rounding and outward convexity
-  var U = [], Ls = [];
-  for (i = 0; i < n; i++) {
-    var A = verts[i], B = verts[(i+1)%n];
-    var ex = B.x-A.x, ey = B.y-A.y, L3 = Math.hypot(ex,ey);
-    if (L3 < 1e-6) return '';
-    Ls.push(L3); U.push({x:ex/L3, y:ey/L3});
-  }
-  var rad = [];
-  for (i = 0; i < n; i++) rad.push(RND*0.5*Math.min(Ls[(i-1+n)%n],Ls[i]));
-  var st = [], en = [];
-  for (i = 0; i < n; i++) {
-    var A = verts[i], B = verts[(i+1)%n], u = U[i];
-    st.push({x:A.x+u.x*rad[i], y:A.y+u.y*rad[i]});
-    en.push({x:B.x-u.x*rad[(i+1)%n], y:B.y-u.y*rad[(i+1)%n]});
-  }
-  var s = 'M'+st[0].x.toFixed(2)+' '+st[0].y.toFixed(2);
-  for (i = 0; i < n; i++) {
-    var a = st[i], b = en[i], emx = (a.x+b.x)/2, emy = (a.y+b.y)/2;
-    var nx = -U[i].y, ny = U[i].x;
-    if ((cx-emx)*nx+(cy-emy)*ny > 0) { nx=-nx; ny=-ny; }
-    var sag = CVX*0.13*Ls[i];
-    s += 'Q'+(emx+nx*2*sag).toFixed(2)+' '+(emy+ny*2*sag).toFixed(2)+' '+b.x.toFixed(2)+' '+b.y.toFixed(2);
-    var v = verts[(i+1)%n], w2 = st[(i+1)%n];
-    s += 'Q'+v.x.toFixed(2)+' '+v.y.toFixed(2)+' '+w2.x.toFixed(2)+' '+w2.y.toFixed(2);
-  }
-  return s+'Z';
+  return s2+'Z';
 }
 
 function buildPath(){
-  var base=+thk.value/10, k=+tpr.value/100, liquid=+liq.value/100;
-  thkO.textContent=base.toFixed(1); tprO.textContent=k.toFixed(2); liqO.textContent=liquid.toFixed(2);
-  var thresh=0.6*base, minArea=(2*base)*(2*base);
+  var base=+thk.value/10,k=+tpr.value/100,liquid=+liq.value/100;
+  thkO.textContent=base.toFixed(1);tprO.textContent=k.toFixed(2);liqO.textContent=liquid.toFixed(2);
   var d='M0 0H'+W+'V'+H+'H0Z';
   for(var i=0;i<polys.length;i++){
-    var pts=collapse(polys[i].pts.slice(), thresh);
-    if(!pts)continue;
-    var sp=bubblePath(pts, polys[i].cen, base, k, liquid);
-    if(sp)d+=sp;
+    var cen=polys[i].cen,pts=polys[i].pts,n=pts.length;
+    var gy=Math.min(1,Math.max(0,cen.y/H));
+    var g=Math.max(0.4,base*((1-k)+2*k*gy));
+    var minD=Infinity;
+    for(var m=0;m<n;m++){
+      var A=pts[m],B=pts[(m+1)%n];
+      var ex=B.x-A.x,ey=B.y-A.y,L=Math.hypot(ex,ey);
+      if(L<1e-6)continue;
+      var dist=Math.abs(ey*(cen.x-A.x)-ex*(cen.y-A.y))/L;
+      if(dist<minD)minD=dist;
+    }
+    var r=minD-g/2;
+    if(r<base*0.3)continue;
+    d+=bubblePath(pts,cen,r,g,liquid);
   }
   return d;
 }
